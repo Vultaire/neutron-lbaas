@@ -381,26 +381,15 @@ class LoadBalancerProxyPluginv2(loadbalancerv2.LoadBalancerPluginBaseV2):
         return self._get_resource(HEALTH_MONITOR, context, id, fields)
 
     def create_healthmonitor(self, context, healthmonitor):
-        if healthmonitor[HEALTH_MONITOR].get(
-                'type') == constants.HEALTH_MONITOR_HTTPS:
-            # it defaults to GET which is not allowed with HTTPS
-            # so remove it for backwards compatibility with a lax
-            # validator
-            if healthmonitor[HEALTH_MONITOR].get('http_method') == 'GET':
-                healthmonitor[HEALTH_MONITOR].pop('http_method')
-            # it defaults to '/' which is not allowed with HTTPS
-            # so remove it for backwards compatibility with a lax
-            # validator
-            if healthmonitor[HEALTH_MONITOR].get('url_path') == '/':
-                healthmonitor[HEALTH_MONITOR].pop('url_path')
-            # it defaults to '200' which is not allowed with HTTPS
-            # so remove it for backwards compatibility with a lax
-            # validator
-            if healthmonitor[HEALTH_MONITOR].get('expected_codes') == '200':
-                healthmonitor[HEALTH_MONITOR].pop('expected_codes')
+        self._filter_healthmonitor(healthmonitor)
         return self._create_resource(HEALTH_MONITOR, context, healthmonitor)
 
     def update_healthmonitor(self, context, id, healthmonitor):
+        self._filter_healthmonitor(healthmonitor)
+        return self._update_resource(HEALTH_MONITOR, context,
+                                     id, healthmonitor)
+
+    def _filter_healthmonitor(self, healthmonitor):
         if healthmonitor[HEALTH_MONITOR].get(
                 'type') == constants.HEALTH_MONITOR_HTTPS:
             # it defaults to GET which is not allowed with HTTPS
@@ -418,8 +407,13 @@ class LoadBalancerProxyPluginv2(loadbalancerv2.LoadBalancerPluginBaseV2):
             # validator
             if healthmonitor[HEALTH_MONITOR].get('expected_codes') == '200':
                 healthmonitor[HEALTH_MONITOR].pop('expected_codes')
-        return self._update_resource(HEALTH_MONITOR, context,
-                                     id, healthmonitor)
+        if healthmonitor[HEALTH_MONITOR].get('type') in (
+                constants.HEALTH_MONITOR_TCP, constants.HEALTH_MONITOR_PING):
+            # http_method is rejected by the Octavia API on these types of
+            # monitors, so remove it for backwards compatibility with a lax
+            # validator
+            # (https://storyboard.openstack.org/#!/story/2006909)
+            healthmonitor[HEALTH_MONITOR].pop('http_method')
 
     def delete_healthmonitor(self, context, id):
         return self._delete_resource(HEALTH_MONITOR, context, id)
